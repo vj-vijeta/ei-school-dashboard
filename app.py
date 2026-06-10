@@ -232,20 +232,17 @@ if app_view == "🏠 Home: Region Overview":
     
     st.divider()
     
-    # 2. Regional Institutional Classifications with Hover Lists
+    # 2. Regional Institutional Classifications with Hover Lists (Pushed purely from Master Database)
     st.markdown('<p class="main-header">Regional Institutional Classifications</p>', unsafe_allow_html=True)
     st.write("Hover over the cards below to see which schools belong to each category.")
     
-    # NEW LOGIC: Pull classifications ONLY from the Master Database (For Vijeta)
     school_type_map = {}
     if not df_master.empty and 'School Name' in df_master.columns and 'School Type' in df_master.columns:
         for _, row in df_master.iterrows():
             name, stype = str(row['School Name']), str(row['School Type'])
-            # Ensure we only track actual names and types
             if name and stype and name.lower() != 'nan' and stype.lower() != 'nan' and name != '':
                 school_type_map[name] = stype
                     
-    # Group school names by their type category
     type_groups = {}
     for name, stype in school_type_map.items():
         if stype not in type_groups:
@@ -291,7 +288,6 @@ if app_view == "🏠 Home: Region Overview":
         
     summary_df = pd.DataFrame(summary_data)
     
-    # Local table division filter
     home_divs = ["All Divisions"] + sorted([str(d) for d in summary_df['Division'].unique() if str(d) != 'nan' and str(d).strip() != ''])
     selected_home_div = st.selectbox("Filter Summary List by Division:", home_divs)
     
@@ -302,7 +298,7 @@ if app_view == "🏠 Home: Region Overview":
 
 
 # =====================================================================================
-# VIEW 2: VIEW SCHOOL DETAILS
+# VIEW 2: VIEW SCHOOL DETAILS (WITH TRUE CROSS-FILTERING)
 # =====================================================================================
 elif app_view == "🎯 View School Details":
     st.title("🎯 School Explorer & Tracker")
@@ -310,32 +306,67 @@ elif app_view == "🎯 View School Details":
     st.sidebar.markdown("---")
     st.sidebar.subheader("Filters")
     
-    # Filter by Zone
-    available_zones = ["All Zones"]
-    if not df_master.empty and 'Zone' in df_master.columns:
-        valid_zones = [z for z in df_master['Zone'].dropna().unique() if str(z).strip() != '']
-        available_zones.extend(sorted(valid_zones))
-    selected_zone = st.sidebar.selectbox("Filter by Zone", available_zones)
+    # Initialize cross-filtering keys in session state to handle tracking safely
+    if 'sb_zone' not in st.session_state: st.session_state.sb_zone = "All Zones"
+    if 'sb_div' not in st.session_state: st.session_state.sb_div = "All Divisions"
+    if 'sb_type' not in st.session_state: st.session_state.sb_type = "All Types"
+    if 'sb_acad' not in st.session_state: st.session_state.sb_acad = "All ACAD"
     
-    # Filter by Division
-    available_divisions = ["All Divisions"]
-    if not df_master.empty and 'Division' in df_master.columns:
-        valid_divs = [d for d in df_master['Division'].dropna().unique() if str(d).strip() != '']
-        available_divisions.extend(sorted(valid_divs))
-    selected_division = st.sidebar.selectbox("Filter by Division", available_divisions)
+    # DYNAMIC CALCULATION: Create cross-reflective subsets for each filter dropdown option
+    if not df_master.empty:
+        # A. Calculate Zone Options (Influenced by Div, Type, and Acad selections)
+        tmp_z = df_master.copy()
+        if st.session_state.sb_div != "All Divisions": tmp_z = tmp_z[tmp_z['Division'] == st.session_state.sb_div]
+        if st.session_state.sb_type != "All Types": tmp_z = tmp_z[tmp_z['School Type'] == st.session_state.sb_type]
+        if st.session_state.sb_acad != "All ACAD": tmp_z = tmp_z[tmp_z['ACAD'] == st.session_state.sb_acad]
+        zones_opts = ["All Zones"] + sorted([str(z) for z in tmp_z['Zone'].dropna().unique() if str(z).strip() != ''])
+        
+        # B. Calculate Division Options (Influenced by Zone, Type, and Acad selections)
+        tmp_d = df_master.copy()
+        if st.session_state.sb_zone != "All Zones": tmp_d = tmp_d[tmp_d['Zone'] == st.session_state.sb_zone]
+        if st.session_state.sb_type != "All Types": tmp_d = tmp_d[tmp_d['School Type'] == st.session_state.sb_type]
+        if st.session_state.sb_acad != "All ACAD": tmp_d = tmp_d[tmp_d['ACAD'] == st.session_state.sb_acad]
+        divs_opts = ["All Divisions"] + sorted([str(d) for d in tmp_d['Division'].dropna().unique() if str(d).strip() != ''])
+
+        # C. Calculate School Type Options (Influenced by Zone, Div, and Acad selections)
+        tmp_t = df_master.copy()
+        if st.session_state.sb_zone != "All Zones": tmp_t = tmp_t[tmp_t['Zone'] == st.session_state.sb_zone]
+        if st.session_state.sb_div != "All Divisions": tmp_t = tmp_t[tmp_t['Division'] == st.session_state.sb_div]
+        if st.session_state.sb_acad != "All ACAD": tmp_t = tmp_t[tmp_t['ACAD'] == st.session_state.sb_acad]
+        types_opts = ["All Types"] + sorted([str(t) for t in tmp_t['School Type'].dropna().unique() if str(t).strip() != ''])
+
+        # D. Calculate ACAD Options (Influenced by Zone, Div, and Type selections)
+        tmp_a = df_master.copy()
+        if st.session_state.sb_zone != "All Zones": tmp_a = tmp_a[tmp_a['Zone'] == st.session_state.sb_zone]
+        if st.session_state.sb_div != "All Divisions": tmp_a = tmp_a[tmp_a['Division'] == st.session_state.sb_div]
+        if st.session_state.sb_type != "All Types": tmp_a = tmp_a[tmp_a['School Type'] == st.session_state.sb_type]
+        acad_opts = ["All ACAD"] + sorted([str(a) for a in tmp_a['ACAD'].dropna().unique() if str(a).strip() != ''])
+
+        # Reset variables to 'All' safely if a previous selection is eliminated by a mutual filter combo
+        if st.session_state.sb_zone not in zones_opts: st.session_state.sb_zone = "All Zones"
+        if st.session_state.sb_div not in divs_opts: st.session_state.sb_div = "All Divisions"
+        if st.session_state.sb_type not in types_opts: st.session_state.sb_type = "All Types"
+        if st.session_state.sb_acad not in acad_opts: st.session_state.sb_acad = "All ACAD"
+    else:
+        zones_opts, divs_opts, types_opts, acad_opts = ["All Zones"], ["All Divisions"], ["All Types"], ["All ACAD"]
+
+    # Render Cascading Selection Filters
+    st.sidebar.selectbox("Filter by Zone", zones_opts, key="sb_zone")
+    st.sidebar.selectbox("Filter by Division", divs_opts, key="sb_div")
+    st.sidebar.selectbox("Filter by School Type", types_opts, key="sb_type")
+    st.sidebar.selectbox("Filter by ACAD", acad_opts, key="sb_acad")
     
     search_query = st.sidebar.text_input("🔍 Search School Name or No.", "").strip()
     
-    # Filter school pool matching constraints
+    # Apply combined selection matrix back on final list output
     filtered_schools = all_schools_list
-    
-    if selected_zone != "All Zones" and not df_master.empty:
-        zone_schools = df_master[df_master['Zone'] == selected_zone]['School Name'].tolist()
-        filtered_schools = [s for s in filtered_schools if s in zone_schools]
-        
-    if selected_division != "All Divisions" and not df_master.empty:
-        div_schools = df_master[df_master['Division'] == selected_division]['School Name'].tolist()
-        filtered_schools = [s for s in filtered_schools if s in div_schools]
+    if not df_master.empty:
+        final_filtered_df = df_master.copy()
+        if st.session_state.sb_zone != "All Zones": final_filtered_df = final_filtered_df[final_filtered_df['Zone'] == st.session_state.sb_zone]
+        if st.session_state.sb_div != "All Divisions": final_filtered_df = final_filtered_df[final_filtered_df['Division'] == st.session_state.sb_div]
+        if st.session_state.sb_type != "All Types": final_filtered_df = final_filtered_df[final_filtered_df['School Type'] == st.session_state.sb_type]
+        if st.session_state.sb_acad != "All ACAD": final_filtered_df = final_filtered_df[final_filtered_df['ACAD'] == st.session_state.sb_acad]
+        filtered_schools = sorted(final_filtered_df['School Name'].replace('', pd.NA).dropna().unique().tolist())
         
     if search_query:
         if not df_master.empty and 'School No' in df_master.columns and search_query.isdigit():
@@ -412,7 +443,6 @@ elif app_view == "🎯 View School Details":
                     st.markdown(render_status_pill(c_row.get('On Boardning Status For students', pd.Series(['N/A'])).values[0]), unsafe_allow_html=True)
                 
                 st.markdown('<p class="sub-header">All Tracker Details (Form View)</p>', unsafe_allow_html=True)
-                # Exclude Sr No out of the form
                 display_as_readonly_form(c_row, exclude_cols=['Sr No'])
 
         # --- SUB-TAB 3: MINDSPARK (FORM LAYOUT) ---
@@ -425,7 +455,6 @@ elif app_view == "🎯 View School Details":
                 st.markdown(render_status_pill(m_row.get('Infra check status', pd.Series(['Pending'])).values[0]), unsafe_allow_html=True)
                     
                 st.markdown('<p class="sub-header">All Tracker Details (Form View)</p>', unsafe_allow_html=True)
-                # Exclude Sr No and PDF copy status as requested
                 display_as_readonly_form(m_row, exclude_cols=['Sr No', 'PDF copy status'])
 
         # --- SUB-TAB 4: ASSET TRACKER ---
