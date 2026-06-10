@@ -236,14 +236,14 @@ if app_view == "🏠 Home: Region Overview":
     st.markdown('<p class="main-header">Regional Institutional Classifications</p>', unsafe_allow_html=True)
     st.write("Hover over the cards below to see which schools belong to each category.")
     
-    # Combine classifications across sheets to get accurate mappings
+    # NEW LOGIC: Pull classifications ONLY from the Master Database (For Vijeta)
     school_type_map = {}
-    for df in [df_cares, df_ms]:
-        if 'School Name' in df.columns and 'School Type' in df.columns:
-            for _, row in df.iterrows():
-                name, stype = str(row['School Name']), str(row['School Type'])
-                if name and stype and name != 'Nan' and stype != 'Nan' and name != '':
-                    school_type_map[name] = stype
+    if not df_master.empty and 'School Name' in df_master.columns and 'School Type' in df_master.columns:
+        for _, row in df_master.iterrows():
+            name, stype = str(row['School Name']), str(row['School Type'])
+            # Ensure we only track actual names and types
+            if name and stype and name.lower() != 'nan' and stype.lower() != 'nan' and name != '':
+                school_type_map[name] = stype
                     
     # Group school names by their type category
     type_groups = {}
@@ -259,7 +259,7 @@ if app_view == "🏠 Home: Region Overview":
                 category_hover = f"🏫 Schools in {stype}:\n" + "\n".join([f"- {s}" for s in sorted(schools)])
                 st.metric(label=stype, value=len(schools), help=category_hover)
     else:
-        st.info("No school category classifications found in tracking files.")
+        st.info("No school category classifications found in the Master Database.")
         
     st.divider()
     
